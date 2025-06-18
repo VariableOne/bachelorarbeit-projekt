@@ -1,0 +1,4 @@
+2025-06-16 15:57:37,379 - INFO - Test-Eintrag in meinlog.txt
+2025-06-16 16:07:12,839 - INFO - Test-Eintrag in meinlog.txt
+2025-06-16 16:19:08,552 - INFO - Test-Eintrag in meinlog.txt
+2025-06-16 17:32:16,751 - INFO - Test-Eintrag in meinlog.txt
