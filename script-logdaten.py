@@ -126,51 +126,53 @@ log_levels = [
 ]
 
 
-admin_operations = ["CREATE", "UPDATE", "DELETE", "ACTION"]
+admin_operations = ["CREATE", "UPDATE", "DELETE", "GET"]
 resource_types = ["users", "clients", "roles", "groups", "authentication"]
 
-with open("names.json") as f:
-    names = json.load(f)
-    user_pool = names[:50]
+tz = pytz.timezone('Europe/Berlin')
+#with open("names.json") as f:
+#    names = json.load(f)
+#    user_pool = names[:50]
 
-# Beispiel
+names = [
+        'Anna', 'Bob', 'Carlos', 'Diana', 'Elena', 'Faisal', 'Gina', 'Hiroshi', 'Isabel',
+        'Jamal', 'Klara', 'Luca', 'Maya', 'Nina', 'Omar', 'Priya', 'Quentin', 'Rina',
+        'Sofia', 'Tom', 'Usha', 'Victor', 'Wei', 'Yara', 'Zane', 'Ivan', 'Zara',
+        'Mikhail', 'Layla', 'Rashid', 'Svetlana', 'Oleg', 'Nadia', 'Kenji', 'Farah'
+    ]
+
+user_pool = names[:25]
+
 normal_hours = list(range(8, 19))
 anomaly_hours = list(range(0, 6))
 
-base_time = datetime.now(pytz.timezone('Europe/Berlin')) - timedelta(days=random.randint(0,5))
-base_time = base_time.replace(hour=random.choice(anomaly_hours), minute=random.randint(0,59), second=random.randint(0,59), microsecond=0)
+normal_hour = random.choice(normal_hours)
+anomaly_hour = random.choice(anomaly_hours)
 
-def random_time_from_hours(hours):
-    tz = pytz.timezone('Europe/Berlin')
-    today = datetime.now(tz)
-    hour = random.choice(hours)
-    minute = random.randint(0, 59)
-    second = random.randint(0, 59)
-    dt = today.replace(hour=hour, minute=minute, second=second, microsecond=0)
-    dt -= timedelta(days=random.randint(0, 5))
-    return dt.isoformat()
+minute = random.randint(0, 59)
+second = random.randint(0, 59)
 
-def enrich_log_with_event_details(log):
+timestamp = datetime.now(tz).replace(hour=normal_hour, minute=minute, second=second, microsecond=0) - timedelta(days=random.randint(0, 5))
+timestamp_anomaly = datetime.now(tz).replace(hour=anomaly_hour, minute=minute, second=second, microsecond=0) - timedelta(days=random.randint(0, 5))
+
+def add_contextual_event_details(log, clients):
     event_type = log.get("type", "")
-
+    user_id = log.get("userId", "")
     details = {}
     error = None
 
     if event_type in ["LOGIN", "LOGIN_ERROR", "REGISTER", "REGISTER_ERROR"]:
         details["auth_method"] = random.choice(["openid-connect", "saml"])
         details["auth_type"] = random.choice(["code", "implicit"])
-        if "ERROR" in event_type:
+        if "error" in event_type:
             error = random.choice(["invalid_credentials", "user_not_found"])
 
-    elif event_type == "VERIFY_EMAIL":
-        details["email"] = f"user{random.randint(1,100)}@example.com"
-
-    elif event_type in ["FORGOT_PASSWORD", "RESET_PASSWORD"]:
-        details["email"] = f"user{random.randint(1,100)}@example.com"
+    elif event_type in ["VERIFY_EMAIL", "FORGOT_PASSWORD", "RESET_PASSWORD"]:
+        details["email"] = f"user{user_id}@{random.choice(normal_realms)}.com"
 
     elif event_type in ["IMPERSONATE", "IMPERSONATE_ERROR"]:
-        details["impersonator"] = f"admin_{random.randint(1,10)}"
-        if "ERROR" in event_type:
+        details["impersonator"] = f"{user_id}"
+        if "error" in event_type:
             error = random.choice(["impersonation_denied"])
 
     elif event_type == "CODE_TO_TOKEN":
@@ -182,314 +184,336 @@ def enrich_log_with_event_details(log):
 
     elif event_type in ["CLIENT_LOGIN", "CLIENT_LOGIN_ERROR", "TOKEN_REFRESH"]:
         details["client_id"] = random.choice(clients)
-        if "ERROR" in event_type:
+        if "error" in event_type:
             error = random.choice(["invalid_client", "unauthorized_client"])
 
     elif event_type == "BRUTE_FORCE_ERROR":
-        details["username"] = f"user{random.randint(1,50)}"
+        details["username"] = f"{user_id}"
         error = "brute_force_detected"
 
     elif event_type == "BRUTE_FORCE_RESET":
-        details["username"] = f"user{random.randint(1,50)}"
+        details["username"] = f"{user_id}"
 
     elif event_type == "REVOKE_GRANT":
         details["client_id"] = random.choice(clients)
 
-    # Update log dictionary
     log["details"] = details
     if error:
         log["error"] = error
 
-    # Optional: roles entfernen, wenn nicht gewünscht
-    if event_type == "LOGIN" and "roles" in log:
-        del log["roles"]
+    return log
+
+
+def add_admin_roles_and_metadata(log):
+    # 10% Chance, dass überhaupt versucht wird, einen Admin-Log zu machen
+    admin_users_per_realm = assign_admins_to_realms(normal_realms)
+    is_admin = random.random() < 0.1
+
+    user_id = log["userId"]
+    realm = log["realmName"]
+    real_admin = admin_users_per_realm.get(realm)
+
+    if is_admin and user_id == real_admin:
+        roles = ["admin"]
+        admin_only_roles = [
+            "security-admin-console",
+            "realm-management",
+            "manage-users",
+            "manage-clients",
+            "manage-events",
+            "manage-realm",
+            "view-users",
+            "admin-cli"
+        ]
+        roles += random.sample(admin_only_roles, k=random.randint(2, 5))
+        log["roles"] = roles
+
+        if "operationType" in log:
+            log.setdefault("details", {})["operationType"] = log["operationType"]
+        else:
+            # Normale User-Rollen (nicht admin)
+          normal_roles = [r for r in realm_roles if r != "admin"]
+          log["roles"] = random.sample(normal_roles, k=random.randint(1, 3))
 
     return log
 
 
-def generate_normal_user_log(user_id, include_labels):
 
-    roles_sample = random.sample(client_roles, k=random.randint(1, 3))
+def clean_irrelevant_fields(log):
+    event_type = log.get("type", "")
+
+    login_related_events = [
+        "LOGIN", "LOGIN_ERROR", "REGISTER", "REGISTER_ERROR",
+        "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+        "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR", "TOKEN_REFRESH"
+    ]
+    token_related_events = [
+        "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+        "CLIENT_LOGIN", "CLIENT_LOGIN_ERROR", "TOKEN_REFRESH"
+    ]
+
+    # auth-Attribute nur bei login-/token-events
+    if event_type not in login_related_events:
+        for key in ["authMethod", "authType", "resourceType", "resourcePath"]:
+            log.get("details", {}).pop(key, None)
+
+    # Rollen nur bei token-relevanten Events
+    if event_type not in token_related_events:
+        log.pop("roles", None)
+
+    return log
+
+
+
+def assign_admins_to_realms(realms):
+    admin_users = {}
+    used_names = set()
+    for realm in realms:
+        while True:
+            candidate = f"admin_{random.randint(1, 100)}"
+            if candidate not in used_names:
+                admin_users[realm] = candidate
+                used_names.add(candidate)
+                break
+    return admin_users
+
+
+
+def generate_noise_session(user_id, include_labels):
+    logs = []
+    sequence = [
+        random.choice(["LOGIN_ERROR", "FORGOT_PASSWORD", "UPDATE_PROFILE", "RESET_PASSWORD", "CODE_TO_TOKEN_ERROR"])
+        for _ in range(random.randint(2, 4))
+    ]
+
+    for event_type in sequence:
+        log = {
+            "timestamp": (timestamp_anomaly + timedelta(seconds=random.randint(1, 60000))).isoformat(),
+            "log_level": random.choice(log_levels),
+            "category": "org.keycloak.events",
+            "type": event_type,
+            "realmId": random.choice(normal_realms),
+            "realmName": random.choice(normal_realms),
+            "clientId": random.choice(clients),
+            "userId": user_id,
+            "sessionId": f"session_{random.randint(1000,9999)}",
+            "ipAddress": f"{random.randint(10, 100)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}",
+            "error": None,
+            "authMethod": random.choice(protocols),
+            "authType": "code",
+            "operationType": None,
+            "resourceType": random.choice(resource_types),
+            "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
+        }
+        log = add_contextual_event_details(log, clients)
+        log = clean_irrelevant_fields(log)
+        if include_labels:
+            log["label"] = 0  # Noise ist nicht Angriff
+        logs.append(log)
+
+    return logs
+
+def generate_normal_user_log(user_id, include_labels):
+    logs = []
+
+    # Haupt-Log (Login etc.)
     log = {
-        "timestamp": random_time_from_hours(normal_hours),
+        "timestamp": (timestamp + timedelta(seconds=random.randint(1, 60000))).isoformat(),
         "log_level": random.choice(log_levels),
         "category": "org.keycloak.events",
-        "type": random.choice(user_event_types),
+        "type": "LOGIN",
         "realmId": random.choice(normal_realms),
         "realmName": random.choice(normal_realms),
         "clientId": random.choice(clients),
-        "userId": user_id or f"user_{random.randint(1, 50)}",
-        "sessionId": f"session_{random.randint(1000,9999)}",  # optional, wie in Java-Log
+        "userId": user_id,
+        "sessionId": f"session_{random.randint(1000,9999)}",
         "ipAddress": f"{random.randint(10, 100)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}",
         "error": None,
-        "roles": roles_sample,
         "authMethod": random.choice(protocols),
         "authType": "code",
         "resourceType": random.choice(resource_types),
         "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
     }
-
-    #log = enrich_log_with_event_details(log)
+    log = add_contextual_event_details(log, clients)
+    log = add_admin_roles_and_metadata(log)
+    log = clean_irrelevant_fields(log)
 
     if include_labels:
         log["label"] = 0
+    logs.append(log)
 
-    return log
+    # Noise hinzufügen (10–30% Wahrscheinlichkeit)
+    if random.random() < 0.2:
+        logs.extend(generate_noise_session(user_id, include_labels))
 
-
-def generate_normal_admin_log(admin_id, include_labels):
-    roles_sample_admin = random.sample(client_roles + ['admin'], k=random.randint(1, 3))
-    log = {
-        "timestamp": random_time_from_hours(normal_hours),
-        "log_level": random.choice(log_levels),
-        "category": "org.keycloak.events",
-        "type": random.choice(["admin_event", "admin_event_error"] + user_event_types),
-        "operationType": random.choice(admin_operations),
-        "realmId": random.choice(["master"] + normal_realms),
-        "realmName": random.choice(["master"] + normal_realms),
-        "clientId": random.choice(clients),
-        "userId": admin_id,
-        "ipAddress": f"{random.randint(10, 100)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}",
-        "resourceType": random.choice(resource_types),
-        "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
-        "error": None,
-        "roles": roles_sample_admin,
-        "authMethod": "openid-connect",
-        "authType": "code"
-    }
-
-    #log = enrich_log_with_event_details(log)
-
-    if include_labels:
-        log["label"] = 0 
-
-    return log
+    return logs
 
 
-def generate_privilege_escalation_session(user_id, include_labels):
+def get_unusual_ip():
+    first_octet = random.choice([198, 203])
+    second_octet = random.randint(0, 255)
+    third_octet = random.randint(0, 255)
+    fourth_octet = random.randint(1, 254)
+    return f"{first_octet}.{second_octet}.{third_octet}.{fourth_octet}"
+
+
+def generate_brute_force_session(user_id, include_labels):
+    logs = []
+    realm = 'master'
+    realm_name = 'master'
+    client = 'login-app'
+    
+    # Viele fehlgeschlagene Login-Versuche
+    for i in range(random.randint(5, 15)):
+        log = {
+            "timestamp":(timestamp_anomaly + timedelta(seconds=random.randint(1, 60000))).isoformat(),
+            "log_level": "warn",
+            "category": "org.keycloak.events",
+            "type": "LOGIN_ERROR",
+            "realmId": realm,
+            "realmName": realm_name,
+            "clientId": client,
+            "userId": user_id,
+            "sessionId": f"session_{random.randint(1000,9999)}",
+            "ipAddress": f"{get_unusual_ip()}",
+            "error": "invalid_credentials",
+            "authMethod": "openid-connect",
+            "authType": "password",
+            "operationType": None,
+            "resourceType": None,
+            "resourcePath": None,
+        }
+        if include_labels:
+            log["label"] = 1
+        logs.append(log)
+    
+    return logs
+
+
+def generate_privilege_exploitation_session(user_id, timestamp_anomaly, include_labels):
     logs = []
     realm = 'master'
     realm_name = 'master'
     admin_client = 'admin-cli'
-    escalated_roles = ['admin', 'realm-admin']
+    escalated_roles = ['admin', 'realm-admin', 'manage-users']
 
-    base_time = datetime.now(pytz.timezone('Europe/Berlin')) - timedelta(days=random.randint(0, 5))
-    base_time = base_time.replace(hour=random.choice(anomaly_hours), minute=random.randint(0, 59), second=random.randint(0, 59), microsecond=0)
-
-    sequence = [
-        {"minutes": 0, "type": "LOGIN", "clientId": "account", "roles": escalated_roles},
-        {"minutes": 4, "type": "IMPERSONATE", "clientId": admin_client, "roles": escalated_roles},
-        {"minutes": 6, "type": "REVOKE_GRANT", "clientId": admin_client, "roles": escalated_roles},
+    anomaly_event_types = [
+        "LOGIN", "IMPERSONATE", "IMPERSONATE_ERROR"
     ]
+    
+    number_of_events = random.randint(3, 7)
 
-    for i in range(2):
-        for step in sequence:
-            timestamp = base_time + timedelta(minutes=step["minutes"] + i * 10)
-            log = {
-                "timestamp": timestamp.isoformat(),
-                "log_level": "info",
-                "category": "org.keycloak.events",
-                "type": step["type"],
-                "realmId": realm,
-                "realmName": realm_name,
-                "clientId": step["clientId"],
-                "userId": user_id,
-                "sessionId": f"session_{random.randint(1000,9999)}",
-                "ipAddress": f"192.168.{random.randint(0,255)}.{random.randint(0,255)}",
-                "error": None,
-                "roles": step["roles"],
-                "authMethod": "openid-connect",
-                "authType": "code",
-                "operationType": None,
-                "resourceType": random.choice(resource_types),
-                "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
-            }
-            if include_labels:
-                log["label"] = 1
-            logs.append(log)
+    for _ in range(number_of_events):
+        event = random.choice(anomaly_event_types)
+        log = {
+            "timestamp": (timestamp_anomaly + timedelta(seconds=random.randint(1, 60000))).isoformat(),
+            "log_level": "info",
+            "category": "org.keycloak.events",
+            "type": event["type"],
+            "realmId": realm,
+            "realmName": realm_name,
+            "clientId": event["clientId"],
+            "userId": user_id,
+            "sessionId": f"session_{random.randint(1000, 9999)}",
+            "ipAddress": get_unusual_ip(),
+            "error": None,
+            #"roles": escalated_roles,
+            "authMethod": "openid-connect",
+            "authType": "code",
+            "operationType": None,
+            "resourceType": random.choice(resource_types),
+            "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000, 9999)}",
+        }
+        log = add_contextual_event_details(log, clients)
+        log = add_admin_roles_and_metadata(log)
+        log = clean_irrelevant_fields(log)
+
+        if include_labels:
+            log["label"] = 1
+        logs.append(log)
+        
     return logs
 
-def generate_lateral_movement_session(user_id, include_labels):
+
+def generate_sabotage_session(user_id, timestamp_anomaly, include_labels):
     logs = []
     realm = 'master'
     realm_name = 'master'
-    target_client = 'realm-management'
-    anomalous_roles = ['impersonation', 'manage-users']
-
-    base_time = datetime.now(pytz.timezone('Europe/Berlin')) - timedelta(days=random.randint(0, 5))
-    base_time = base_time.replace(hour=random.choice(anomaly_hours), minute=random.randint(0, 59), second=random.randint(0, 59), microsecond=0)
-
-    sequence = [
-        {"minutes": 0, "type": "LOGIN", "clientId": "account", "roles": anomalous_roles},
-        {"minutes": 5, "type": "IMPERSONATE", "clientId": target_client, "roles": anomalous_roles},
-        {"minutes": 10, "type": "UPDATE_PROFILE", "clientId": target_client, "roles": anomalous_roles},
+    admin_client = 'admin-cli'
+    sabotage_events = [
+        "UPDATE_PASSWORD",
+        "RESET_PASSWORD",
+        "FORGOT_PASSWORD",
+        "UPDATE_PROFILE",
+        "UPDATE_EMAIL",
+        "VERIFY_EMAIL",
+        "BRUTE_FORCE_ERROR",
+        "BRUTE_FORCE_RESET",
     ]
 
-    for i in range(2):
-        for step in sequence:
-            timestamp = base_time + timedelta(minutes=step["minutes"] + i * 15)
-            log = {
-                "timestamp": timestamp.isoformat(),
-                "log_level": "info",
-                "category": "org.keycloak.events",
-                "type": step["type"],
-                "realmId": realm,
-                "realmName": realm_name,
-                "clientId": step["clientId"],
-                "userId": user_id,
-                "sessionId": f"session_{random.randint(1000,9999)}",
-                "ipAddress": f"192.168.{random.randint(0,255)}.{random.randint(0,255)}",
-                "error": None,
-                "roles": step["roles"],
-                "authMethod": "openid-connect",
-                "authType": "code",
-                "operationType": None,
-                "resourceType": random.choice(resource_types),
-                "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
-            }
-            if include_labels:
-                log["label"] = 1
-            logs.append(log)
-    return logs
+    number_of_events = random.randint(3, 7)  # wie viele Ereignisse in der Session
 
-def generate_credential_access_session(user_id, include_labels):
-    logs = []
-    realm = 'master'
-    realm_name = 'master'
-    security_client = 'security-admin-console'
-    anomaly_roles = ['view-users']
+    for i in range(number_of_events):
+        event_type = random.choice(sabotage_events)
+        log = {
+            "timestamp": (timestamp_anomaly + timedelta(seconds=i * random.randint(10, 60))).isoformat(),
+            "log_level": "info",
+            "category": "org.keycloak.events",
+            "type": event_type,
+            "realmId": realm,
+            "realmName": realm_name,
+            "clientId": admin_client,
+            "userId": user_id,
+            "sessionId": f"session_{random.randint(1000,9999)}",
+            "ipAddress": get_unusual_ip(),
+            "error": None,
+            "authMethod": "openid-connect",
+            "authType": "code",
+            "operationType": random.choice('UPDATE', 'DELETE', 'GET'),
+        }
+        log = add_contextual_event_details(log, clients)
+        log = add_admin_roles_and_metadata(log)
+        log = clean_irrelevant_fields(log)
 
-    base_time = datetime.now(pytz.timezone('Europe/Berlin')) - timedelta(days=random.randint(0, 5))
-    base_time = base_time.replace(hour=random.choice(anomaly_hours), minute=random.randint(0, 59), second=random.randint(0, 59), microsecond=0)
-
-    sequence = [
-        {"minutes": 0, "type": "LOGIN", "clientId": "account", "roles": anomaly_roles},
-        {"minutes": 3, "type": "VIEW_CONSENT", "clientId": security_client, "roles": anomaly_roles},
-        {"minutes": 7, "type": "VIEW_PROFILE", "clientId": security_client, "roles": anomaly_roles},
-    ]
-
-    for i in range(2):
-        for step in sequence:
-            timestamp = base_time + timedelta(minutes=step["minutes"] + i * 12)
-            log = {
-                "timestamp": timestamp.isoformat(),
-                "log_level": "info",
-                "category": "org.keycloak.events",
-                "type": step["type"],
-                "realmId": realm,
-                "realmName": realm_name,
-                "clientId": step["clientId"],
-                "userId": user_id,
-                "sessionId": f"session_{random.randint(1000,9999)}",
-                "ipAddress": f"192.168.{random.randint(0,255)}.{random.randint(0,255)}",
-                "error": None,
-                "roles": step["roles"],
-                "authMethod": "openid-connect",
-                "authType": "code",
-                "operationType": None,
-                "resourceType": random.choice(resource_types),
-                "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
-            }
-            if include_labels:
-                log["label"] = 1
-            logs.append(log)
-    return logs
-
-def generate_defense_evasion_session(user_id, include_labels):
-    logs = []
-    realm = 'master'
-    realm_name = 'master'
-    security_client = 'security-admin-console'
-    evasion_roles = ['admin', 'manage-events']
-
-    base_time = datetime.now(pytz.timezone('Europe/Berlin')) - timedelta(days=random.randint(0, 5))
-    base_time = base_time.replace(hour=random.choice(anomaly_hours), minute=random.randint(0, 59), second=random.randint(0, 59), microsecond=0)
-
-    sequence = [
-        {"minutes": 0, "type": "LOGIN", "clientId": "account", "roles": evasion_roles},
-        {"minutes": 3, "type": "UPDATE_PROFILE", "clientId": security_client, "roles": evasion_roles},
-        {"minutes": 7, "type": "UPDATE_EMAIL", "clientId": security_client, "roles": evasion_roles},
-    ]
-
-    for i in range(2):
-        for step in sequence:
-            timestamp = base_time + timedelta(minutes=step["minutes"] + i * 12)
-            log = {
-                "timestamp": timestamp.isoformat(),
-                "log_level": "info",
-                "category": "org.keycloak.events",
-                "type": step["type"],
-                "realmId": realm,
-                "realmName": realm_name,
-                "clientId": step["clientId"],
-                "userId": user_id,
-                "sessionId": f"session_{random.randint(1000,9999)}",
-                "ipAddress": f"192.168.{random.randint(0,255)}.{random.randint(0,255)}",
-                "error": None,
-                "roles": step["roles"],
-                "authMethod": "openid-connect",
-                "authType": "code",
-                "operationType": None,
-                "resourceType": random.choice(resource_types),
-                "resourcePath": f"{random.choice(['users', 'clients'])}/{random.randint(1000,9999)}",
-            }
-            if include_labels:
-                log["label"] = 1
-            logs.append(log)
+        if include_labels:
+            log["label"] = 1
+        logs.append(log)
     return logs
 
 
-def generate_logs_with_sessions(num_sessions, anomaly_ratio, include_labels):
+def generate_logs_with_sessions(num_sessions, anomaly_probability, include_labels):
     logs = []
-    admin_ratio = 0.09
-    num_anomalies = int(num_sessions * anomaly_ratio)
-    num_admins = int(num_sessions * admin_ratio)
-    num_normals = num_sessions - num_anomalies - num_admins
-    # Normale User Logs (einfache normale User Logs, keine Sessions)
-    for _ in range(num_normals):
-        user_id = random.choice(user_pool)
-        logs.append(generate_normal_user_log(user_id=user_id, include_labels=include_labels))
 
-    # Anomale User Sessions (z.B. Privilege Escalation, Lateral Movement ...)
-    for _ in range(num_anomalies):
-        attack_type = random.choice(['privilege_escalation', 'lateral_movement', 'credential_access', 'defense_evasion'])
-        user_id = random.choice(user_pool)
+    for _ in range(num_sessions):
+        if random.random() < anomaly_probability:
+            # Angriffssession mit 10 % Wahrscheinlichkeit
+            attack_type = random.choice(['privilege_exploitation'])
+            user_id = random.choice(user_pool)
 
-        if attack_type == 'privilege_escalation':
-            logs.extend(generate_privilege_escalation_session(
-                user_id=user_id,
-                include_labels=include_labels
-            ))
-        elif attack_type == 'credential_access':
-            logs.extend(generate_credential_access_session(
-                user_id=user_id,
-                include_labels=include_labels
-            ))
-        elif attack_type == 'defense_evasion':
-            logs.extend(generate_defense_evasion_session(
-                user_id=user_id,
-                include_labels=include_labels
-            ))
+            if attack_type == 'privilege_exploitation':
+                logs.extend(generate_privilege_exploitation_session(
+                    user_id=user_id,
+                    include_labels=include_labels
+                ))
         else:
-            logs.extend(generate_lateral_movement_session(
+            # Normale Logs
+            user_id = random.choice(user_pool)
+            logs.extend(generate_normal_user_log(
                 user_id=user_id,
                 include_labels=include_labels
             ))
 
-    # Admin Logs (nur einzelne Admin Events)
-    for _ in range(num_admins):
-        admin_id = "admin"
-        logs.append(generate_normal_admin_log(admin_id=admin_id, include_labels=include_labels))
+       # base_time += timedelta(seconds=random.choice(1, 60000))
 
+    #random.shuffle(logs)
     logs.sort(key=lambda x: x['timestamp'])
-    random.shuffle(logs)
     return logs
 
 
-train_logs = generate_logs_with_sessions(num_sessions=40000, anomaly_ratio=0.0, include_labels=False)
-val_logs   = generate_logs_with_sessions(num_sessions=5000, anomaly_ratio=0.05, include_labels=True)
-test_logs  = generate_logs_with_sessions(num_sessions=5000, anomaly_ratio=0.05, include_labels=True)
-train_logs_for_isolated_models = generate_logs_with_sessions(num_sessions=40000, anomaly_ratio=0.05, include_labels=False)
+train_logs = generate_logs_with_sessions(num_sessions=7500, anomaly_probability=0.0, include_labels=False)
+val_logs   = generate_logs_with_sessions(num_sessions=1250, anomaly_probability=0.05, include_labels=True)
+test_logs  = generate_logs_with_sessions(num_sessions=1250, anomaly_probability=0.05, include_labels=True)
+train_logs_for_isolated_models = generate_logs_with_sessions(num_sessions=7500, anomaly_probability=0.2, include_labels=False)
 
 # Logs speichern
 with open("train_logs.json", "w") as f:
