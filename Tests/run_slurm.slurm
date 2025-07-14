@@ -30,10 +30,16 @@ conda activate env
 # Verzeichnis liegt wie dieses Skript. Das Ergebnis landet in „models_executed.ipynb“.
 
   jupyter nbconvert \
-  --to notebook \
-  --execute \
-  --ExecutePreprocessor.timeout=-1 \
-  lstm-dbscan-test.ipynb
+    --to notebook \
+    --execute \
+    --ExecutePreprocessor.timeout=-1 \
+    lstm-dbscan-test.ipynb \
+
+  jupyter nbconvert \
+    --to notebook \
+    --execute \
+    --ExecutePreprocessor.timeout=-1 \
+    models_isolated.ipynb \
 # ─────────────────────────────────────────────────────────────────
 # Ende des Skripts
 # ─────────────────────────────────────────────────────────────────
