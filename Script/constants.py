@@ -1,7 +1,27 @@
+import random
+
+
 normal_realms = [    
     'bosch',
-    'telekom'
+    'telekom',
+    'aws'
     ]
+
+
+# response_types = ["code", "token", "id_token", "code token"]
+# redirect_uris = [
+#     "http://localhost:8080/admin/master/console/#/master/events",
+#     "https://myapp.example.com/callback",
+#     "https://anotherapp.example.com/auth/callback"
+# ]
+
+
+# Beispiel für bekannte Keycloak Scopes
+keycloak_scopes = ["openid", "email", "profile", "offline_access", "roles", "phone"]
+
+# Mögliche Grant Types
+grant_types = ["authorization_code", "refresh_token", "client_credentials", "password", "implicit"]
+
 
     # Standard Clients in Keycloak
 clients = [
@@ -10,44 +30,6 @@ clients = [
         'broker',                # Identity Broker Client
         'realm-management',      # Realm Management Console Client
         'security-admin-console' # Keycloak Admin UI
-    ]
-
-    # Realm Roles (Beispiele aus Keycloak realm-level roles)
-realm_roles = [
-        'admin',
-        'realm-admin',
-        'create-realm',
-        'impersonation',
-        'manage-users',
-        'manage-realm',
-        'manage-clients',
-        'view-users',
-        'manage-events',
-        'query-users',
-        'manage-authorization',
-        'admin-cli',
-        'offline_access',
-        'uma_authorization',
-    ]
-
-    # Client Roles (Beispiele aus Keycloak client-level roles)
-client_roles = [
-        'manage-account',
-        'view-profile',
-        'manage-account-links',
-        'view-consent',
-        'manage-consent',
-        'view-realm',
-        'manage-realm',
-        'view-users',
-        'manage-users',
-        'manage-clients',
-        'view-clients',
-        'manage-events',
-        'manage-authorization',
-        'create-client',
-        'manage-account:manage-account',
-        'account:view-profile',
     ]
 
     # Client Scopes (Keycloak Standard Scopes)
@@ -85,29 +67,40 @@ connections = [
         'openid-connect',
     ]
 
-user_event_types = [
+event_types = [
     "LOGIN",
     "LOGIN_ERROR",
     "LOGOUT",
     "REGISTER",
-    "REGISTER_ERROR",
     "UPDATE_PASSWORD",
     "UPDATE_PROFILE",
     "UPDATE_EMAIL",
     "VERIFY_EMAIL",
-    "FORGOT_PASSWORD",
     "RESET_PASSWORD",
     "CODE_TO_TOKEN",
-    "CODE_TO_TOKEN_ERROR",
-    "CLIENT_LOGIN",
-    "CLIENT_LOGIN_ERROR",
     "REVOKE_GRANT",
-    "IMPERSONATE",
-    "IMPERSONATE_ERROR",
-    "BRUTE_FORCE_ERROR",
-    "BRUTE_FORCE_RESET",
-    "TOKEN_REFRESH"
+    "REFRESH_TOKEN",
+    "CLIENT_LOGIN"
 ]
+
+user_event_weights = [
+    0.2,  # LOGIN
+    0.15, # LOGIN_ERROR
+    0.1,  # LOGOUT
+    0.05, # REGISTER
+    0.05, # UPDATE_PASSWORD
+    0.05, # UPDATE_PROFILE
+    0.02, # UPDATE_EMAIL
+    0.03, # VERIFY_EMAIL
+    0.03, # RESET_PASSWORD
+    0.1,  # CODE_TO_TOKEN
+    0.02, # REVOKE_GRANT
+    0.15, # REFRESH_TOKEN
+    0.05  # CLIENT_LOGIN
+]
+
+
+user_event_types = random.choices(event_types, weights=user_event_weights, k=1)[0]
 
 log_levels = [
     "trace",
@@ -119,7 +112,7 @@ log_levels = [
 ]
 
 
-admin_operations = ["CREATE", "UPDATE", "DELETE", "GET"]
+admin_operations = ["CREATE", "UPDATE", "DELETE", "ACTION"]
 resource_types = ["users", "clients", "roles", "groups", "authentication"]
 
 #with open("names.json") as f:

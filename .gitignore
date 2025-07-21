@@ -1,1 +1,4 @@
 env/
+.env
+Tests/keycloak_events*.jsonl
+Selenium-Test/attacks.jsonl

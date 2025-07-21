@@ -1,5 +1,6 @@
 #!/bin/bash
 #
+#SBATCH --gres=gpu:1
 #SBATCH --job-name=exec_nb
 #SBATCH --output=exec_nb.out
 #SBATCH --error=exec_nb.err
