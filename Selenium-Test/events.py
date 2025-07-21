@@ -28,7 +28,7 @@ def get_all_events(token):
     return resp.json()
 
 def save_events_to_file(events):
-    filename = datetime.now().strftime("attacks_%Y%m%d_%H%M%S.jsonl")
+    filename = datetime.now().strftime("attacks.jsonl")
     with open(filename, "a") as f:
         for event in events:
             f.write(json.dumps(event) + "\n")
