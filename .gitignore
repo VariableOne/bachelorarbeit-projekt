@@ -1,4 +1,7 @@
 env/
 .env
 Tests/keycloak_events*.jsonl
+Tests/*.jsonl
 Selenium-Test/attacks.jsonl
+Selenium-Test/user_passwords.json
+Selenium-Test/logs.jsonl

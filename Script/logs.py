@@ -29,6 +29,7 @@ def generate_log():
         "connection": connection,
         "scope": scope,
         "grant_type": grant_type,
+        "ipAddress": ip
     }
 
 
@@ -46,6 +47,7 @@ def generate_noise_session(user_id, include_labels):
             "clientId": context["clientId"],
             "userId": user_id,
             "sessionId": context["session_id"],
+            "ipAddress": context["ip"]
         }
 
         log = assign_realm_and_validate_session(log, user_id)
@@ -76,6 +78,7 @@ def generate_admin_event_log(include_labels):
         "clientId": context["clientId"],
         "userId": context["userId"],
         "sessionId": context["session_id"],
+        "ipAddress": context["ip"]
     }
     login_log = assign_realm_and_validate_session(login_log, "admin")
     login_log = add_contextual_event_details(login_log, clients, "admin", context)
@@ -98,6 +101,7 @@ def generate_admin_event_log(include_labels):
                     "realmId": context["realmId"],
                     "clientId": "security-admin-console",
                     "sessionId": context["session_id"],
+                    "ipAddress": context["ip"]
                 },
                 "operationType": operation,
                 "resourceType": resource_type,
@@ -120,6 +124,7 @@ def generate_admin_event_log(include_labels):
                 "clientId": context["clientId"],
                 "userId": context["userId"],
                 "sessionId": context["session_id"],
+                "ipAddress": context["ip"]
             }
             log = assign_realm_and_validate_session(log, "admin")
             log = add_contextual_event_details(log, clients, "admin", context)
@@ -144,6 +149,7 @@ def generate_user_session_logs(user_id, include_labels):
         "clientId": context["clientId"],
         "userId": context["userId"],
         "sessionId": context["session_id"],
+        "ipAddress": context["ip"]
     }
     login_log = assign_realm_and_validate_session(login_log, user_id)
     login_log = add_contextual_event_details(login_log, clients, user_id, context)
@@ -165,6 +171,7 @@ def generate_user_session_logs(user_id, include_labels):
             "clientId": context["clientId"],
             "userId": context["userId"],
             "sessionId": context["session_id"],
+            "ipAddress": context["ip"]
         }
 
         log = assign_realm_and_validate_session(log, user_id)

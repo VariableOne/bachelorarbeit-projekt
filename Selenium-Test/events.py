@@ -6,15 +6,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client_id_local = os.getenv("client_id_local")
-client_secret_local = os.getenv("client_secret_local")
+# client_id_local = os.getenv("client_id_local")
+# client_secret_local = os.getenv("client_secret_local")
 token_url_local = os.getenv("token_url_local")
 event_url_local = os.getenv("event_url_local")
 
 def get_token():
     data = {
-        'client_id': client_id_local,
-        'client_secret': client_secret_local,
+        'client_id': "nintendo",
+        'client_secret': "985nb83NydE1Cz6ClizUVm9FTsaFBH5Y",
         'grant_type': 'client_credentials'
     }
     resp = requests.post(token_url_local, data=data)
@@ -28,7 +28,7 @@ def get_all_events(token):
     return resp.json()
 
 def save_events_to_file(events):
-    filename = datetime.now().strftime("attacks.jsonl")
+    filename = datetime.now().strftime("normallogs.jsonl")
     with open(filename, "a") as f:
         for event in events:
             f.write(json.dumps(event) + "\n")
