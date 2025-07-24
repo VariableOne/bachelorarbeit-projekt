@@ -84,8 +84,9 @@ def test_dos():
     print("DoS Test abgeschlossen. Bitte Logs prüfen, ob Instabilität aufgetreten ist.")
 
 # Tests aufrufen
-test_privilege_escalation()
-test_token_manipulation()
-test_dos()
+for i in range(10):
+    test_privilege_escalation()
+    test_token_manipulation()
+    test_dos()
 
 driver.quit()
