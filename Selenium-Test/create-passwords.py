@@ -1,27 +1,28 @@
+import os
 import requests
 import string
 import secrets
 
-token_url = "http://localhost:8080/realms/aws/protocol/openid-connect/token"
-client_id = "aws-console"
-client_secret = "jVRUonJKG3iuuuzPtGzX2iei8L8vSlkT"
+client_secret_sega = os.getenv("client_secret_sega")
+client_two = "megadrive"
+realm = "Sega"
+token_url_local = os.getenv("token_url_local")
+base_url = os.getenv("base_url_local")
+
 
 def get_admin_token():
     data = {
         "grant_type": "client_credentials",
-        "client_id": client_id,
-        "client_secret": client_secret
+        "client_id": client_two,
+        "client_secret": client_secret_sega
     }
-    resp = requests.post(token_url, data=data)
+    resp = requests.post(token_url_local, data=data)
     resp.raise_for_status()
     return resp.json()["access_token"]
 
 def generate_password(length=12):
     alphabet = string.ascii_letters + string.digits + "!@#$%&*"
     return ''.join(secrets.choice(alphabet) for _ in range(length))
-
-base_url = "http://localhost:8080"
-realm = "aws"
 
 def get_all_users(token):
     headers = {"Authorization": f"Bearer {token}"}

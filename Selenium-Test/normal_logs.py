@@ -26,30 +26,35 @@ admin_url_local = os.getenv("admin_url_local")
 admin_username_local = os.getenv("admin_username_local")
 admin_password_local = os.getenv("admin_password_local")
 
+client_secret_aws = os.getenv("client_secret_aws")
+client_secret_ubisoft = os.getenv("client_secret_ubisoft")
+client_secret_sega = os.getenv("client_secret_sega")
+client_secret_nintendo = os.getenv("client_secret_nintendo")
+
 def choose_realm():
     realm = random.choice(["Sega", "Nintendo", "ubisoft", "aws"])
 
     if realm == "Sega":
         client_two = "megadrive"
-        client_secret = "9reshZStMOA5bt0bJzXt3Q5P67sy5x5p"
+        client_secret = client_secret_sega
         with open("user_passwords_sega.json", "r") as f:
             user_passwords = json.load(f)
 
     if realm == "Nintendo":
         client_two = "wiii"
-        client_secret = "j9sIIjLlZg0DazfTHNCiCev4WoEVHAbq"
+        client_secret = client_secret_nintendo
         with open("user_passwords_nintendo.json", "r") as f:
             user_passwords = json.load(f)
 
     if realm == "ubisoft":
         client_two = "ps3"
-        client_secret = "9WXaMXTUEM5r5J8j5YBtPEwVsxiiKjTs"
+        client_secret = client_secret_ubisoft
         with open("user_passwords.json", "r") as f:
             user_passwords = json.load(f)
 
     if realm == "aws":
         client_two = "aws-console"
-        client_secret = "jVRUonJKG3iuuuzPtGzX2iei8L8vSlkT"
+        client_secret = client_secret_aws
         with open("user_passwords_aws.json", "r") as f:
             user_passwords = json.load(f)
 
