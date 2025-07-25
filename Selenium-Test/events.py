@@ -9,10 +9,18 @@ load_dotenv()
 token_url_local = os.getenv("token_url_local")
 event_url_local = os.getenv("event_url_local")
 
-def get_token():
+# Client-Daten für die verschiedenen Realms (aktuell leer)
+clients = {
+    "Sega": {"client_id": "Sega", "client_secret": ""},
+    "Nintendo": {"client_id": "Nintendo", "client_secret": ""},
+    "Ubisoft": {"client_id": "Ubisoft", "client_secret": ""},
+    "AWS": {"client_id": "AWS", "client_secret": ""}
+}
+
+def get_token(client_id, client_secret):
     data = {
-        'client_id': "Sega",
-        'client_secret': "9reshZStMOA5bt0bJzXt3Q5P67sy5x5p",
+        'client_id': client_id,
+        'client_secret': client_secret,
         'grant_type': 'client_credentials'
     }
     resp = requests.post(token_url_local, data=data)
@@ -28,7 +36,7 @@ def clean_logs(events):
 
 def save_events_to_file(events):
     filename = datetime.now().strftime("normallogs.jsonl")
-    with open(filename, "a") as f:
+    with open(filename, "w") as f:  # "w" damit die Datei neu geschrieben wird
         for event in events:
             f.write(json.dumps(event) + "\n")
     print(f"Events gespeichert in {filename}")
@@ -41,7 +49,23 @@ def get_all_events(token):
     return resp.json()
 
 if __name__ == "__main__":
-    token = get_token()
-    events = get_all_events(token)
-    cleaned_events = clean_logs(events)
-    save_events_to_file(cleaned_events)
+    all_events = []
+    for realm, creds in clients.items():
+        print(f"Hole Events für Realm {realm}...")
+        # token holen, falls client_secret leer ist, überspringen wir den Realm
+        if not creds['client_secret']:
+            print(f"Kein client_secret für {realm}, Realm übersprungen.")
+            continue
+        token = get_token(creds['client_id'], creds['client_secret'])
+        events = get_all_events(token)
+        cleaned = clean_logs(events)
+        # Optional: Realm als Feld hinzufügen, um Herkunft zu erkennen
+        for event in cleaned:
+            event['realm'] = realm
+        all_events.extend(cleaned)
+
+    # Sortiere alle Events nach Zeitstempel (angenommen das Feld heißt "timestamp")
+    # Falls das Feld anders heißt, passe es entsprechend an
+    all_events.sort(key=lambda x: x.get('timestamp', ''))
+
+    save_events_to_file(all_events)

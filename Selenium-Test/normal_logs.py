@@ -2,6 +2,7 @@ import json
 import os
 import secrets
 import string
+import threading
 from dotenv import load_dotenv
 import requests
 from selenium import webdriver
@@ -22,6 +23,7 @@ load_dotenv()
 
 base_url_local = os.getenv("base_url_local")
 admin_url_local = os.getenv("admin_url_local")
+token_url_local = os.getenv("token_url_local")
 
 admin_username_local = os.getenv("admin_username_local")
 admin_password_local = os.getenv("admin_password_local")
@@ -61,7 +63,7 @@ def choose_realm():
     return realm, client_secret, client_two, user_passwords
 
 
-def simulate_login(username_now, password_now, realm, client_two):
+def simulate_login(username_now, password_now, realm, client_two, driver):
     login_url = f"{base_url_local}/realms/{realm}/protocol/openid-connect/auth?client_id={client_two}&response_type=code&scope=openid&redirect_uri={base_url_local}"
     driver.get(login_url)
     
@@ -72,7 +74,7 @@ def simulate_login(username_now, password_now, realm, client_two):
     wait.until(EC.url_changes(login_url))
 
 
-def client_login(client_two, client_secret):
+def client_login(client_two, client_secret, realm):
     token_url = f"{base_url_local}/realms/{realm}/protocol/openid-connect/token"
 
     payload = {
@@ -92,49 +94,13 @@ def client_login(client_two, client_secret):
         print(response.status_code, response.text)
         return None
     
-def simulate_logout(realm):
+def simulate_logout(realm, driver):
     logout_url = f"{base_url_local}/realms/{realm}/protocol/openid-connect/logout"
     driver.get(logout_url)
     print("Benutzer wurde ausgeloggt.")
 
-def simulate_login_error(username_now, password_now, realm, client_two):
-    simulate_login(username_now, "trololololol", realm, client_two)
-
-def simulate_admin_actions(realm):
-    try:
-        driver.get(f"{base_url_local}/admin/")
-        wait = WebDriverWait(driver, 10)
-        wait.until(EC.presence_of_element_located((By.ID, "username"))).send_keys(admin_username_local)
-        driver.find_element(By.ID, "password").send_keys(admin_password_local)
-        driver.find_element(By.ID, "kc-login").click()
-        time.sleep(3)
-
-        driver.get(f"{base_url_local}/admin/master/console/#/realms/{realm}/users")
-        time.sleep(4)
-
-        user_links = driver.find_elements(By.CSS_SELECTOR, "a.kc-user-link")
-        if not user_links:
-            print("[Admin] Keine Benutzer gefunden.")
-            return
-
-        selected_user = random.choice(user_links)
-        username = selected_user.text
-        selected_user.click()
-        time.sleep(2)
-
-        email_input = wait.until(EC.presence_of_element_located((By.ID, "email")))
-        new_email = generate_random_email()
-        email_input.clear()
-        email_input.send_keys(new_email)
-
-        save_button = driver.find_element(By.XPATH, "//button[.='Save']")
-        save_button.click()
-        time.sleep(2)
-
-        print(f"[Admin] E-Mail von Benutzer '{username}' geändert zu: {new_email}")
-
-    except Exception as e:
-        print("[Admin] Fehler beim Simulieren einer Admin-Aktion:", e)
+def simulate_login_error(username_now, password_now, realm, client_two, driver):
+    simulate_login(username_now, "trololololol", realm, client_two, driver)
 
 
 def generate_random_email():
@@ -142,7 +108,7 @@ def generate_random_email():
     domain = random.choice(["activision.de", "mail.com", "aws.com"])
     return f"{name}@{domain}"
 
-def simulate_profile_update(realm):
+def simulate_profile_update(realm, driver):
     driver.get(f"{base_url_local}/realms/{realm}/account")
     time.sleep(2)
 
@@ -163,13 +129,15 @@ def simulate_profile_update(realm):
     except Exception as e:
         print("[Profilupdate] Fehler beim Aktualisieren:", e)
 
-def simulate_refresh_token(username, password, realm, client_id):
+
+def simulate_refresh_token(username, password, realm, client_id, client_secret):
     token_url = f"{base_url_local}/realms/{realm}/protocol/openid-connect/token"
 
     # Initial login – um refresh_token zu erhalten
     payload = {
         "grant_type": "password",
         "client_id": client_id,
+        "client_secret": client_secret,  # <-- hier mitgeben
         "username": username,
         "password": password
     }
@@ -183,7 +151,8 @@ def simulate_refresh_token(username, password, realm, client_id):
         refresh_payload = {
             "grant_type": "refresh_token",
             "refresh_token": refresh_token,
-            "client_id": client_id
+            "client_id": client_id,
+            "client_secret": client_secret  # <-- hier mitgeben
         }
 
         refresh_resp = requests.post(token_url, data=refresh_payload)
@@ -192,103 +161,79 @@ def simulate_refresh_token(username, password, realm, client_id):
         else:
             print("[Token] Refresh fehlgeschlagen:", refresh_resp.text)
     else:
-        print("[Token] Initialer Login für Refresh fehlgeschlagen.")
+        print("[Token] Initialer Login für Refresh fehlgeschlagen:", response.text)
 
-def assign_realm_role_to_user(admin_token, realm, user_id, role_name):
-    headers = {
-        "Authorization": f"Bearer {admin_token}",
-        "Content-Type": "application/json"
-    }
 
-    # 1. Rolle abrufen
-    role_url = f"{base_url_local}/admin/realms/{realm}/roles/{role_name}"
-    role_resp = requests.get(role_url, headers=headers)
-    role_resp.raise_for_status()
-    role = role_resp.json()
+def simulate_user_session(username, password, realm, client_two, client_secret, driver, min_refresh=10, max_refresh=20):
+    try:
+        print(f"Starte Session für User: {username}")
+        simulate_login(username, password, realm, client_two, driver)
 
-    # 2. Rolle zuweisen
-    assign_url = f"{base_url_local}/admin/realms/{realm}/users/{user_id}/role-mappings/realm"
-    assign_resp = requests.post(assign_url, headers=headers, json=[role])
+        if random.random() < 0.3:
+            print("[Client Login] Versuche Client-Login")
+            token = client_login(client_two, client_secret, realm)
+            if token:
+                print("[Client Login] Erfolgreich")
+            else:
+                print("[Client Login] Fehlgeschlagen")
+
+        # Erste Wartephase nach Login
+        time.sleep(random.uniform(60, 120))  # 1–2 Minuten
+
+        # Refresh Token Loop – realistisch gestreckt
+        refresh_count = random.randint(min_refresh, max_refresh)  # z. B. 10–20
+        for _ in range(refresh_count):
+            simulate_refresh_token(username, password, realm, client_two, client_secret)
+            time.sleep(random.uniform(60, 90))  # jede Runde 1–1.5 Min = 10–30 Min
+
+        if random.random() < 0.0001:
+            simulate_profile_update(realm, driver)
+            time.sleep(random.uniform(60, 90))  # weitere 1–1.5 Min
+
+        if random.random() < 0.05:
+            simulate_login_error(username, password, realm, client_two, driver)
+            time.sleep(random.uniform(60, 90))  # weitere 1–1.5 Min
+
+        # Logout am Ende
+        simulate_logout(realm, driver)
+        print(f"Session beendet für User: {username}")
+
+        # Letzte Pause, um auf ca. 30 Minuten zu kommen
+        time.sleep(random.uniform(60, 120))  # 1–2 Minuten
+
+    finally:
+        driver.quit()
+
+
+
+def run_parallel_sessions(total_sessions=15):
+    threads = []
+    last_user = None
     
-    if assign_resp.status_code == 204:
-        print(f"[Admin] Rolle '{role_name}' zugewiesen an Benutzer {user_id}")
-    else:
-        print("[Admin] Rollenzuweisung fehlgeschlagen:", assign_resp.text)
+    for i in range(total_sessions):
+        realm, client_secret, client_two, user_passwords = choose_realm()
+        
+        while True:
+            random_user = random.choice(user_passwords)
+            if random_user != last_user:
+                break
+        last_user = random_user
+        
+        username_now = random_user["username"]
+        password_now = random_user["password"]
 
-def assign_client_role_to_user(admin_token, realm, client_id, user_id, role_name):
-    headers = {
-        "Authorization": f"Bearer {admin_token}",
-        "Content-Type": "application/json"
-    }
+        options = Options()
+        options.add_argument("--headless")
+        driver = webdriver.Chrome(options=options)
 
-    # 1. Hole Client UUID
-    clients_url = f"{base_url_local}/admin/realms/{realm}/clients"
-    clients_resp = requests.get(clients_url, headers=headers)
-    clients_resp.raise_for_status()
-    clients = clients_resp.json()
-    client_uuid = next(c["id"] for c in clients if c["clientId"] == client_id)
+        t = threading.Thread(target=simulate_user_session, args=(username_now, password_now, realm, client_two, client_secret, driver))
+        t.start()
+        threads.append(t)
 
-    # 2. Hole die Rolle aus diesem Client
-    role_url = f"{base_url_local}/admin/realms/{realm}/clients/{client_uuid}/roles/{role_name}"
-    role_resp = requests.get(role_url, headers=headers)
-    role = role_resp.json()
+    for t in threads:
+        t.join()
 
-    # 3. Rolle zuweisen
-    assign_url = f"{base_url_local}/admin/realms/{realm}/users/{user_id}/role-mappings/clients/{client_uuid}"
-    assign_resp = requests.post(assign_url, headers=headers, json=[role])
-
-    if assign_resp.status_code == 204:
-        print(f"[Admin] Clientrolle '{role_name}' zugewiesen an Benutzer {user_id}")
-    else:
-        print("[Admin] Clientrollenzuweisung fehlgeschlagen:", assign_resp.text)
-
-
-last_user = None
-
-for i in range(1000):
-    realm, client_secret, client_two, user_passwords = choose_realm()
-    # Neu starten
-    options = Options()
-    options.add_argument("--headless")
-    driver = webdriver.Chrome(options=options)
-
-    # Benutzer wählen
-    while True:
-        random_user = random.choice(user_passwords)
-        if random_user != last_user:
-            break
-
-    username_now = random_user["username"]
-    password_now = random_user["password"]
-    last_user = random_user
-    print(f"[{i}] Login mit Benutzer: {username_now}")
-
-    simulate_login(username_now, password_now, realm, client_two)
-    time.sleep(random.randint(3, 7))
-
-    if random.random() < 0.05:
-        simulate_login_error(username_now, password_now, realm, client_two)
-        time.sleep(5)
-
-    if random.random() < 0.2:
-        client_login(client_two, client_secret)
-        time.sleep(5)
-
-    if random.random() < 0.01:
-        simulate_admin_actions(realm)
-        time.sleep(5)
-
-    if random.random() < 0.05:
-        simulate_logout(realm)
-        time.sleep(2)
-
-    if random.random() < 0.01:
-        simulate_profile_update(realm)
-        time.sleep(2)
-
-
-    driver.quit()
-    time.sleep(1)
+run_parallel_sessions(15)
 
 driver.quit()
 print("Test abgeschlossen.")
