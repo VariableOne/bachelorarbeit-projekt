@@ -5,3 +5,4 @@ Tests/*.jsonl
 Selenium-Test/attacks.jsonl
 Selenium-Test/user_passwords*.json
 Selenium-Test/logs.jsonl
+docker-compose.yml

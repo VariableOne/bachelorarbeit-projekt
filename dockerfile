@@ -1,20 +1,13 @@
 FROM python:3.10-slim
 
-# Installiere Systemtools
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# OpenJDK installieren (Java 17+)
+RUN apt-get update && apt-get install -y openjdk-17-jdk tini && rm -rf /var/lib/apt/lists/*
 
-# Setze Arbeitsverzeichnis
 WORKDIR /workspace
 
-# Projektdateien kopieren
-COPY requirements.txt .
-COPY Tests/lstm-dbscan-test.ipynb /workspace/
+# Pfad für Keycloak ins PATH setzen
+ENV PATH="/workspace/keycloak-26.1.0/bin:${PATH}"
 
-# Python-Abhängigkeiten + Jupyter installieren
-RUN pip install --upgrade pip \
- && pip install -r requirements.txt \
- && pip install notebook
+ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Containerstart: Jupyter
-CMD ["jupyter", "notebook", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--NotebookApp.token="]
-
+CMD ["sh", "-c", "kc.sh start-dev"]
