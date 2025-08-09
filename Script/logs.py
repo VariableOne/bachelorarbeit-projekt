@@ -5,7 +5,7 @@ import random
 import uuid
 from constants import log_levels, user_event_types,clients,normal_realms,protocols,resource_types,user_pool, connections, keycloak_scopes, grant_types
 from functions import timestamp, timestamp_anomaly,add_contextual_event_details,assign_realm_and_validate_session
-from anomalies import generate_brute_force_session,generate_frequent_get_queries_session, generate_sabotage_session, generate_privilege_exploitation_session
+from anomalies import generate_brute_force_session, generate_sabotage_session, generate_privilege_exploitation_session
 
 
 def generate_log():
@@ -233,7 +233,7 @@ def generate_logs_with_sessions(num_sessions, anomaly_probability, include_label
         logs.extend(generate_user_session_logs(user_id, include_labels))
 
     # Anomalie Sessions
-    anomaly_types = ['privilege_exploitation', 'brute_force', 'sabotage', 'same_resource']
+    anomaly_types = ['privilege_exploitation', 'brute_force', 'sabotage']
     for _ in range(num_anomaly):
         user_id = random.choice(user_pool)
         attack_type = random.choice(anomaly_types)
@@ -244,8 +244,6 @@ def generate_logs_with_sessions(num_sessions, anomaly_probability, include_label
             logs.extend(generate_brute_force_session(include_labels))
         elif attack_type == 'sabotage':
             logs.extend(generate_sabotage_session(user_id, include_labels))
-        elif attack_type == 'same_resource':
-            logs.extend(generate_frequent_get_queries_session(user_id, include_labels))
 
     add_random_time_noise(logs, max_noise_seconds=30)
     # Nach Zeit sortieren

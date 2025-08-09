@@ -66,7 +66,7 @@ def choose_realm():
 def simulate_login(username_now, password_now, realm, client_two, driver):
     login_url = f"{base_url_local}/realms/{realm}/protocol/openid-connect/auth?client_id={client_two}&response_type=code&scope=openid&redirect_uri={base_url_local}"
     driver.get(login_url)
-    
+    time.sleep(5)
     wait = WebDriverWait(driver, 10)
     wait.until(EC.visibility_of_element_located((By.ID, "username"))).send_keys(username_now)
     wait.until(EC.visibility_of_element_located((By.ID, "password"))).send_keys(password_now)
@@ -101,7 +101,6 @@ def simulate_logout(realm, driver):
 
 def simulate_login_error(username_now, password_now, realm, client_two, driver):
     simulate_login(username_now, "trololololol", realm, client_two, driver)
-
 
 def generate_random_email():
     name = ''.join(secrets.choice(string.ascii_lowercase) for _ in range(8))
@@ -186,9 +185,9 @@ def simulate_user_session(username, password, realm, client_two, client_secret, 
             simulate_refresh_token(username, password, realm, client_two, client_secret)
             time.sleep(random.uniform(60, 90))  # jede Runde 1–1.5 Min = 10–30 Min
 
-        if random.random() < 0.0001:
-            simulate_profile_update(realm, driver)
-            time.sleep(random.uniform(60, 90))  # weitere 1–1.5 Min
+        # if random.random() < 0.0001:
+        #     simulate_profile_update(realm, driver)
+        #     time.sleep(random.uniform(60, 90))  # weitere 1–1.5 Min
 
         if random.random() < 0.05:
             simulate_login_error(username, password, realm, client_two, driver)
@@ -205,8 +204,7 @@ def simulate_user_session(username, password, realm, client_two, client_secret, 
         driver.quit()
 
 
-
-def run_parallel_sessions(total_sessions=15):
+def run_parallel_sessions(total_sessions):
     threads = []
     last_user = None
     
@@ -230,10 +228,15 @@ def run_parallel_sessions(total_sessions=15):
         t.start()
         threads.append(t)
 
+        # Pause zwischen Thread-Starts: 10 bis 30 Sekunden
+        sleep_seconds = random.uniform(10, 30)
+        print(f"Warte {sleep_seconds:.1f} Sekunden bis zum Start des nächsten Threads...")
+        time.sleep(sleep_seconds)
+
     for t in threads:
         t.join()
 
-run_parallel_sessions(15)
+run_parallel_sessions(30)
 
 driver.quit()
 print("Test abgeschlossen.")

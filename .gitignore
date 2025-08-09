@@ -1,8 +1,8 @@
 env/
 .env
-Tests/keycloak_events*.jsonl
+Tests/Intension-Logs/keycloak_events*.jsonl
 Tests/*.jsonl
-Selenium-Test/attacks.jsonl
+Tests/Intension-Logs
+Selenium-Test/*.jsonl
 Selenium-Test/user_passwords*.json
-Selenium-Test/logs.jsonl
 docker-compose.yml
