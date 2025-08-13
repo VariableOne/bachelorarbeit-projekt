@@ -40,12 +40,21 @@ def get_token(client_id, client_secret, realm):
     resp.raise_for_status()
     return resp.json()['access_token']
 
+def remove_ip_recursive(obj):
+    if isinstance(obj, dict):
+        # Entferne 'ipAddress' im aktuellen dict
+        obj.pop('ipAddress', None)
+        # Gehe rekursiv alle Werte durch
+        for key, value in obj.items():
+            remove_ip_recursive(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            remove_ip_recursive(item)
+
 def clean_logs(events):
-    cleaned = []
     for e in events:
-        e.pop("ipAddress", None)  # Entfernt die IP-Adresse, falls vorhanden
-        cleaned.append(e)
-    return cleaned
+        remove_ip_recursive(e)
+    return events
 
 def save_events_to_file(events):
     filename = datetime.now().strftime("getted_normallogs.jsonl")
@@ -77,9 +86,9 @@ if __name__ == "__main__":
             cleaned_user_events = clean_logs(user_events)
             all_user_events.extend(cleaned_user_events)
 
-            # Admin-Events holen
             admin_events = get_admin_events(token, realm)
-            all_admin_events.extend(admin_events)
+            cleaned_admin_events = clean_logs(admin_events)
+            all_admin_events.extend(cleaned_admin_events)
 
         # Kombinieren und sortieren
         all_events = all_user_events + all_admin_events
