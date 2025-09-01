@@ -1,7 +1,6 @@
 env/
 .env
 Tests/Intension-Logs/keycloak_events*.jsonl
-Tests/*.jsonl
 Tests/Intension-Logs
 Selenium-Test/*.jsonl
 Selenium-Test/user_passwords*.json
